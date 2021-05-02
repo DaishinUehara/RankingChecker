@@ -58,11 +58,12 @@ class TSearch(Base):
             処理完了後のレコードが戻る
         """
         ret_t_search = session.query(TSearch).filter(TSearch.search_datetime==t_search.search_datetime).first()
-        if ret_t_search is None:
+        if ret_t_search is not None:
+            return ret_t_search
+        else:
             session.add(t_search)
             session.commit()
-            ret_t_search = session.query(TSearch).filter(TSearch.search_datetime==t_search.search_datetime).first()
-        return ret_t_search
+            return t_search # commit後なのでidが採番されている
 
 class TKeyword(Base):
     """キーワード
@@ -105,11 +106,12 @@ class TKeyword(Base):
             処理完了後のレコードが戻る
         """
         ret_t_keyword = session.query(TKeyword).filter(TKeyword.search_id==t_keyword.search_id).filter(TKeyword.keyword==t_keyword.keyword).first()
-        if ret_t_keyword is None:
+        if ret_t_keyword is not None:
+            return ret_t_keyword
+        else:
             session.add(t_keyword)
             session.commit()
-            ret_t_keyword = session.query(TKeyword).filter(TKeyword.search_id==t_keyword.search_id).filter(TKeyword.keyword==t_keyword.keyword).first()
-        return ret_t_keyword
+            return t_keyword
 
 
 class TRanking(Base):
@@ -157,8 +159,8 @@ class TRanking(Base):
         """
         session.add(t_ranking)
         session.commit()
-        ret_t_ranking = session.query(TRanking).filter(TRanking.search_id==t_ranking.search_id).filter(TRanking.doc_id==t_ranking.doc_id).filter(TRanking.ranking==t_ranking.ranking).first()
-        return ret_t_ranking
+        #ret_t_ranking = session.query(TRanking).filter(TRanking.search_id==t_ranking.search_id).filter(TRanking.doc_id==t_ranking.doc_id).filter(TRanking.ranking==t_ranking.ranking).first()
+        return t_ranking
 
     @staticmethod
     def upsert(t_ranking,session: scoped_session ):
@@ -183,7 +185,7 @@ class TRanking(Base):
         if ret_t_ranking is None:
             session.add(t_ranking)
             session.commit()
-            ret_t_ranking = session.query(TRanking).filter(TRanking.search_id==t_ranking.search_id).filter(TRanking.ranking==t_ranking.ranking).first()
+            return t_ranking
         elif ret_t_ranking.doc_id != t_ranking.doc_id:
             ret_t_ranking.doc_id = t_ranking.doc_id
             session.commit()
@@ -260,7 +262,7 @@ class TDoc(Base):
         if ret_t_doc is None:
             session.add(t_doc)
             session.commit()
-            ret_t_doc = session.query(TDoc).filter(TDoc.link_url==t_doc.link_url).first()
+            return t_doc
         elif ret_t_doc.title != t_doc.title or ret_t_doc.mypage_flg != t_doc.mypage_flg:
             ret_t_doc.title = t_doc.title
             ret_t_doc.mypage_flg = t_doc.mypage_flg
@@ -444,31 +446,39 @@ def search(keywords: list[str], dbfile: str, url: str, max_ranking: int, drop_fl
     connect_string = "sqlite:///{}".format(dbfile)
     engine = sqlalchemy.create_engine(connect_string, echo=False) # SQLとデータを出力したい場合はecho=Trueにする
 
-    session = scoped_session(
-                sessionmaker(
-                    autocommit = False,
-                    autoflush = True,
-                    bind = engine))
+    try:
+        session = scoped_session(
+                    sessionmaker(
+                        autocommit = False,
+                        autoflush = True,
+                        bind = engine))
 
-    Base.query = session.query_property()
+        Base.query = session.query_property()
 
-    if drop_flg:
-        Base.metadata.drop_all(engine)
+        if drop_flg:
+            Base.metadata.drop_all(engine)
 
-    Base.metadata.create_all(engine)
+        Base.metadata.create_all(engine)
 
-    if len(keywords) > 0 and max_ranking > 0:
-        t_search = TSearch()
-        dttime = datetime.now()
-        t_search.search_datetime = dttime
-        t_search = TSearch().upsert(t_search,session)
-        for keyword in keywords:
-            t_keyword = TKeyword()
-            t_keyword.keyword = keyword
-            t_keyword.search_id = t_search.id
-            t_keyword = TKeyword().upsert(t_keyword,session)
-        
-        __search_start(session, t_search, keywords,max_ranking, dttime ,url)
+        if len(keywords) > 0 and max_ranking > 0:
+            t_search = TSearch()
+            dttime = datetime.now()
+            t_search.search_datetime = dttime
+            t_search = TSearch().upsert(t_search,session)
+            for keyword in keywords:
+                t_keyword = TKeyword()
+                t_keyword.keyword = keyword
+                t_keyword.search_id = t_search.id
+                t_keyword = TKeyword().upsert(t_keyword,session)
+            
+            __search_start(session, t_search, keywords,max_ranking, dttime ,url)
+
+    except Exception as e:
+        (exc_type, exc_value, exc_traceback) = sys.exc_info()
+        t = traceback.format_exception(exc_type, exc_value, exc_traceback)
+        pprint.pprint(t, width=120,stream=sys.stderr)
+        engine.dispose()
+        sys.exit(1)
 
 def main(argv):
     """メイン処理
