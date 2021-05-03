@@ -7,6 +7,7 @@ import traceback
 import sqlalchemy
 import sqlite3
 import requests
+import time
 from sqlalchemy import Column, Integer, String, Date, Float, DateTime
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -19,6 +20,56 @@ from sqlalchemy.sql.schema import UniqueConstraint
 
 Base = declarative_base()
 
+
+class TSearchM(Base):
+    """検索マスタ
+
+    データベースの検索テーブルに対応するオブジェクト。
+    検索を格納している。
+
+    Attributes
+    ----------
+    id : int
+        検索ID 自動採番
+    search_datetime : datetime
+        検索マスタID 外部キー(検索.id)
+    keywords : text
+        検索日時
+    """
+
+    __tablename__ = 't_search_m'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    keywords = Column(String(256), nullable=False)
+
+    @staticmethod
+    def upsert(t_search_m,session: scoped_session ):
+        """登録更新処理
+
+        keywordsで検索しレコードが存在しない場合にINSERTをおこなう。
+        データが変更されていた場合はなにもおこなわない。
+        (id以外に項目がkeywordsのみのため処理の必要がない)。
+
+        Parameters
+        ----------
+        t_search_m: TSearchM
+            登録更新対象のデータ
+        session: scoped_session
+            データベースへの接続セッション
+
+        Returns
+        -------
+        ret_t_search_m: TSearchM
+            処理完了後のレコードが戻る
+        """
+        ret_t_search_m = session.query(TSearchM).filter(TSearchM.keywords==t_search_m.keywords).first()
+        if ret_t_search_m is not None:
+            return ret_t_search_m
+        else:
+            session.add(t_search_m)
+            session.commit()
+            return t_search_m # commit後なのでidが採番されている
+
+
 class TSearch(Base):
     """検索
 
@@ -30,11 +81,14 @@ class TSearch(Base):
     id : int
         検索ID 自動採番
     search_datetime : datetime
-        検索日時 外部キー(検索.id)
+        検索マスタID 外部キー(検索.id)
+    search_datetime : datetime
+        検索日時
     """
 
     __tablename__ = 't_search'
     id = Column(Integer, primary_key=True, autoincrement=True)
+    search_m_id = Column(Integer, nullable=False)
     search_datetime = Column(DateTime, nullable=False)
 
     @staticmethod
@@ -64,55 +118,6 @@ class TSearch(Base):
             session.add(t_search)
             session.commit()
             return t_search # commit後なのでidが採番されている
-
-class TKeyword(Base):
-    """キーワード
-
-    データベースのキーワードテーブルに対応するオブジェクト。
-    検索ごとのキーワードを格納している。
-
-    Attributes
-    ----------
-    id : int
-        キーワードID 自動採番
-    search_id : int
-        検索ID 外部キー(検索.id)
-    keyword : str
-        検索キーワード
-    """
-    __tablename__ = 't_keyword'
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    search_id = Column(Integer, nullable=False)
-    keyword = Column(String(32), nullable=False)
-
-    @staticmethod
-    def upsert(t_keyword,session: scoped_session ):
-        """登録更新処理
-
-        search_idとkeywordで検索しレコードが存在しない場合にINSERTをおこなう。
-        データが変更されていた場合はなにもおこなわない。
-        (id以外に項目がsearch_idとkeywordのみのため処理の必要がない)。
-
-        Parameters
-        ----------
-        t_keyword: TKeyword
-            登録更新対象のデータ
-        session: scoped_session
-            データベースへの接続セッション
-
-        Returns
-        -------
-        ret_t_keyword: TKeyword
-            処理完了後のレコードが戻る
-        """
-        ret_t_keyword = session.query(TKeyword).filter(TKeyword.search_id==t_keyword.search_id).filter(TKeyword.keyword==t_keyword.keyword).first()
-        if ret_t_keyword is not None:
-            return ret_t_keyword
-        else:
-            session.add(t_keyword)
-            session.commit()
-            return t_keyword
-
 
 class TRanking(Base):
     """ランキング
@@ -378,6 +383,7 @@ def __search_next(session: scoped_session,t_search: TSearch, link_text: str, ran
         return ret_ranking
 
     link_text=a.get("href")
+    time.sleep(1)
     return __search_next(session, t_search, link_text, ret_ranking, max_ranking, search_time, my_url)
 
 
@@ -424,6 +430,7 @@ def __search_start(session: scoped_session,t_search: TSearch, keywords: list[str
     if a is None:
         return ret_ranking
     link_text=a.get("href")
+    time.sleep(1)
     return __search_next(session, t_search, link_text, ret_ranking, max_ranking, search_time, my_url)
 
 def search(keywords: list[str], dbfile: str, url: str, max_ranking: int, drop_flg: bool):
@@ -461,16 +468,17 @@ def search(keywords: list[str], dbfile: str, url: str, max_ranking: int, drop_fl
         Base.metadata.create_all(engine)
 
         if len(keywords) > 0 and max_ranking > 0:
+            tab_keywords = "\t".join(keywords)
+            t_search_m = TSearchM()
+            t_search_m.keywords=tab_keywords
+            t_search_m = TSearchM().upsert(t_search_m,session)
+
             t_search = TSearch()
             dttime = datetime.now()
+            t_search.search_m_id=t_search_m.id
             t_search.search_datetime = dttime
             t_search = TSearch().upsert(t_search,session)
-            for keyword in keywords:
-                t_keyword = TKeyword()
-                t_keyword.keyword = keyword
-                t_keyword.search_id = t_search.id
-                t_keyword = TKeyword().upsert(t_keyword,session)
-            
+
             __search_start(session, t_search, keywords,max_ranking, dttime ,url)
 
     except Exception:
