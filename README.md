@@ -5,6 +5,14 @@
 
 [pythonでキーワードのランキングチェックツールを作成してみた](https://www.dmysd.net/news/archives/5)
 
+## 事前準備
+
+```sh
+pip install sqlalchemy requests beautifulsoup4 lxml
+```
+
+## 実行方法
+
 ```sh
 py RankingCheck.py [--drop] [-u URL] [-o DBファイル名] [-m 調査最大順位] キーワード1 [キーワード2] [キーワード3] …
 ```
