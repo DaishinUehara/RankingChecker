@@ -31,7 +31,7 @@ py RankingCheck.py [--drop] [-u URL] [-o DBファイル名] [-m 調査最大順�
 
 ```mermaid
 erDiagram
-    T_SERACH ||--|{ T_KEYWORD : search_id
+    T_SERACH_M ||--|{ T_SERACH : search_m_id
     T_SERACH ||--|{ T_RANKING : search_id
     T_DOC ||--|{ T_RANKING : doc_id
 ```
@@ -46,17 +46,17 @@ participant 検索処理 as search
 participant 検索開始 as search_start
 participant 次頁検索 as search_next
 participant DB登録更新処理 as db_upsert
+database 検索マスタ as t_search_m
 database 検索 as t_search
-database キーワード as t_keyword
 database ドキュメント as t_doc
 database ランキング as t_ranking
 
 cmd->>main: コマンドライン引数
     main->>search: 
-        search->>t_search: 登録
+        search->>t_search_m: 登録(キーワード)
+            t_search_m->>search: 登録レコード
+        search->>t_search: 登録(検索マスタid)
             t_search->>search: 登録レコード
-        search->>t_keyword: 登録(検索id,キーワード)
-            t_keyword->>search: 登録レコード
         search->>search_start: 
             search_start->>db_upsert: 
                 db_upsert->>t_doc: 登録/更新(ドキュメントurl)
