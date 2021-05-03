@@ -473,12 +473,12 @@ def search(keywords: list[str], dbfile: str, url: str, max_ranking: int, drop_fl
             
             __search_start(session, t_search, keywords,max_ranking, dttime ,url)
 
-    except Exception as e:
-        (exc_type, exc_value, exc_traceback) = sys.exc_info()
-        t = traceback.format_exception(exc_type, exc_value, exc_traceback)
-        pprint.pprint(t, width=120,stream=sys.stderr)
+    except Exception:
+        raise
+    else:
+        session.close()
+    finally:
         engine.dispose()
-        sys.exit(1)
 
 def main(argv):
     """メイン処理
