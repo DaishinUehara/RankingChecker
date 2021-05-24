@@ -13,7 +13,7 @@ from datetime import datetime
 from sqlalchemy.sql.expression import null
 from RankingModels import Base, TSearchM, TSearch, TRanking, TDoc
 
-def __db_upsert(session: scoped_session,soup: BeautifulSoup, t_search: TSearch, ranking: int, max_ranking: int,search_time: datetime, my_url: str) -> int:
+def __db_upsert(session: scoped_session,soup: BeautifulSoup, t_search: TSearch, ranking: int, max_ranking: int,search_time: datetime, my_url: str, wordjoin: str) -> int:
     """DB登録更新処理
 
     得られた検索結果をスクレイピングし検索結果をDBに登録する処理をおこなう
@@ -41,10 +41,12 @@ def __db_upsert(session: scoped_session,soup: BeautifulSoup, t_search: TSearch, 
         処理完了したランキング順位
     """
 
-    search_time_string = search_time.strftime('%Y%m%d_%H%M%S')
-    if not os.path.exists(search_time_string):
-        os.makedirs(search_time_string)
-    with open("{}{}bs_{}.html".format(search_time_string,os.sep,str(ranking)), 'w', encoding='UTF-8') as f:
+    output_dir = search_time.strftime('%Y-%m-%d') + os.sep + search_time.strftime('%H%M%S')
+    #search_time_string = search_time.strftime('%Y%m%d_%H%M%S')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    with open("{}{}{}_{}.html".format(output_dir,os.sep,wordjoin,str(ranking)), 'w', encoding='UTF-8') as f:
         f.write(soup.prettify())
 
     divs = soup.select("[class='ZINbbc xpd O9g5cc uUPGi']")
@@ -79,7 +81,7 @@ def __db_upsert(session: scoped_session,soup: BeautifulSoup, t_search: TSearch, 
                 return max_ranking
     return ranking
 
-def __search_next(session: scoped_session,t_search: TSearch, link_text: str, ranking: int, max_ranking: int,search_time: datetime, my_url: str) -> int:
+def __search_next(session: scoped_session,t_search: TSearch, link_text: str, ranking: int, max_ranking: int,search_time: datetime, my_url: str, wordjoin: str) -> int:
     """検索開始
 
     検索結果の2ページ以降の処理とおこなう。次項がある場合は再帰的に自身を呼び出す。
@@ -112,7 +114,7 @@ def __search_next(session: scoped_session,t_search: TSearch, link_text: str, ran
     r = requests.get(google_url)
     soup = BeautifulSoup(r.text, 'lxml') #要素を抽出
 
-    ret_ranking = __db_upsert(session, soup, t_search, ranking, max_ranking, search_time, my_url)
+    ret_ranking = __db_upsert(session, soup, t_search, ranking, max_ranking, search_time, my_url, wordjoin)
     if ret_ranking >= max_ranking:
         return ret_ranking
 
@@ -122,7 +124,7 @@ def __search_next(session: scoped_session,t_search: TSearch, link_text: str, ran
 
     link_text=a.get("href")
     time.sleep(1)
-    return __search_next(session, t_search, link_text, ret_ranking, max_ranking, search_time, my_url)
+    return __search_next(session, t_search, link_text, ret_ranking, max_ranking, search_time, my_url, wordjoin)
 
 
 def __search_start(session: scoped_session,t_search: TSearch, keywords: list[str], max_ranking: int,search_time: datetime, my_url: str) -> int:
@@ -156,11 +158,13 @@ def __search_start(session: scoped_session,t_search: TSearch, keywords: list[str
     search_word=""
     for keyword in keywords:
         search_word = "{} \"{}\"".format(search_word,keyword)
+    
+    wordjoin = "_".join(keywords)
 
     r = requests.get(google_url,params={'q': search_word})
     soup = BeautifulSoup(r.text, 'lxml') #要素を抽出
     ranking=0
-    ret_ranking = __db_upsert(session, soup, t_search, ranking, max_ranking, search_time, my_url)
+    ret_ranking = __db_upsert(session, soup, t_search, ranking, max_ranking, search_time, my_url, wordjoin)
     if ret_ranking >= max_ranking:
         return ret_ranking
 
@@ -169,7 +173,7 @@ def __search_start(session: scoped_session,t_search: TSearch, keywords: list[str
         return ret_ranking
     link_text=a.get("href")
     time.sleep(1)
-    return __search_next(session, t_search, link_text, ret_ranking, max_ranking, search_time, my_url)
+    return __search_next(session, t_search, link_text, ret_ranking, max_ranking, search_time, my_url, wordjoin)
 
 def search(keywords: list[str], dbfile: str, url: str, max_ranking: int, drop_flg: bool):
     """検索処理
@@ -246,7 +250,7 @@ def main(argv):
     try:
         for i,arg in enumerate(argv):
             if skip == False and i > 0:
-                if arg == '-o':
+                if arg == '-db':
                     dbfile = argv[i+1]
                     skip = True
                 elif arg == '-u':
@@ -273,14 +277,14 @@ def main(argv):
         if 0 == len(keyword) and drop_flg == False:
             errlist=[]
             errlist.append("[ERROR]:引数の形がちがいます")
-            errlist.append("py RankingCheck.py [--drop] [-m 最大ランキング数] [-u URL] [-o DBファイル名] キーワード1 [キーワード2] [キーワード3] …")
+            errlist.append("py RankingCheck.py [--drop] [-m 最大ランキング数] [-u URL] [-db DBファイル名] キーワード1 [キーワード2] [キーワード3] …")
             pprint.pprint(errlist, width=120,stream=sys.stderr)
             sys.exit(1)
     except IndexError as e:
         (exc_type, exc_value, exc_traceback) = sys.exc_info()
         t = traceback.format_exception(exc_type, exc_value, exc_traceback)
         t.insert(0,"[ERROR]:引数の形がちがいます")
-        t.insert(1,"py RankingCheck.py [--drop] [-m 最大ランキング数] [-u URL] [-o DBファイル名] キーワード1 [キーワード2] [キーワード3] …")
+        t.insert(1,"py RankingCheck.py [--drop] [-m 最大ランキング数] [-u URL] [-db DBファイル名] キーワード1 [キーワード2] [キーワード3] …")
         pprint.pprint(t, width=120,stream=sys.stderr)
         sys.exit(1)
     # 引数処理完了
