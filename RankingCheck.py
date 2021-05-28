@@ -157,7 +157,8 @@ def __search_start(session: scoped_session,t_search: TSearch, keywords: list[str
 
     search_word=""
     for keyword in keywords:
-        search_word = "{} \"{}\"".format(search_word,keyword)
+        #search_word = "{} \"{}\"".format(search_word,keyword)
+        search_word = search_word + " " + keyword
     
     wordjoin = "_".join(keywords)
 
@@ -250,7 +251,7 @@ def main(argv):
     try:
         for i,arg in enumerate(argv):
             if skip == False and i > 0:
-                if arg == '-db':
+                if arg == '-o':
                     dbfile = argv[i+1]
                     skip = True
                 elif arg == '-u':
@@ -277,14 +278,14 @@ def main(argv):
         if 0 == len(keyword) and drop_flg == False:
             errlist=[]
             errlist.append("[ERROR]:引数の形がちがいます")
-            errlist.append("py RankingCheck.py [--drop] [-m 最大ランキング数] [-u URL] [-db DBファイル名] キーワード1 [キーワード2] [キーワード3] …")
+            errlist.append("py RankingCheck.py [--drop] [-m 最大ランキング数] [-u URL] [-o DBファイル名] キーワード1 [キーワード2] [キーワード3] …")
             pprint.pprint(errlist, width=120,stream=sys.stderr)
             sys.exit(1)
     except IndexError as e:
         (exc_type, exc_value, exc_traceback) = sys.exc_info()
         t = traceback.format_exception(exc_type, exc_value, exc_traceback)
         t.insert(0,"[ERROR]:引数の形がちがいます")
-        t.insert(1,"py RankingCheck.py [--drop] [-m 最大ランキング数] [-u URL] [-db DBファイル名] キーワード1 [キーワード2] [キーワード3] …")
+        t.insert(1,"py RankingCheck.py [--drop] [-m 最大ランキング数] [-u URL] [-o DBファイル名] キーワード1 [キーワード2] [キーワード3] …")
         pprint.pprint(t, width=120,stream=sys.stderr)
         sys.exit(1)
     # 引数処理完了
