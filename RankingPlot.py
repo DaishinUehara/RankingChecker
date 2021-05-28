@@ -102,7 +102,9 @@ def selectRanking(dbfile:str, keywords:list[str]):
         engine.dispose()
     return graph_dic
 
-def plot_datas(plotdatas:dict, output_base_dir:str = 'Plots'):
+def plot_datas(plotdatas:dict, output_base_dir:str = '.'):
+    dttime = datetime.now()
+    output_dir = os.path.join(output_base_dir,dttime.strftime('%Y-%m-%d'),"Plot")
     for keyword, datas in plotdatas.items():
         fig = go.Figure()
         for key, data in datas.items():
@@ -122,8 +124,6 @@ def plot_datas(plotdatas:dict, output_base_dir:str = 'Plots'):
         fig.update_layout(title=keyword,xaxis_title="日付",yaxis_title="順位")
         filename=keyword.replace("\t","_") + ".html"
 
-        dttime = datetime.now()
-        output_dir = output_base_dir + os.sep + dttime.strftime('%Y-%m-%d') + os.sep + dttime.strftime('%H%M%S')
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
